@@ -4,13 +4,18 @@ from groq import Groq
 import os
 import re
 from duckduckgo_search import DDGS
+import sounddevice as sd
+import torch
+from TTS.api import TTS
 
-# Initialize recognizer class (for recognizing the speech)
+# Initialize TTS 
+tts = TTS(model_name = "tts_models/de/thorsten/tacotron2-DDC", progress_bar = False, gpu = False)
+# for recognizing the speech
 load_dotenv()
 r = sr.Recognizer()
 client = Groq(api_key = os.getenv("GROQ_API_KEY"))
 text = "" 
-F = True
+F = None
 
 
 def speech_rec() -> str:
@@ -42,6 +47,11 @@ def groq_chat_handling(user_input: str):
     response = response.choices[0].message.content
     return response
 
+def tts_handling(txt):
+    wav, sample_rate = tts.tts(text = txt,speaker = None,language = None,return_type = "np")
+    #play it directly
+    sd.play(wav, sample_rate)
+    sd.wait()
 
 def search_tool(query: str):
     search =  DDGS()
@@ -83,7 +93,7 @@ FOLLOW THESE VERY STRICTLY"""
 chat_history = [system_prompt]
 
 while True:
-    if F:  # Only listen to the user if F is True
+    if F == True or F == None:  # Only listen to the user if F is True
         # Get user input (speech to text conversion)
         speech_to_text = speech_rec()
         if speech_to_text == "[ERROR] An error occured":
@@ -131,5 +141,11 @@ while True:
         if y_n:
             if y_n.group(1) == "YES":
                 F = True
+                final_answer_match = re.search(r"Final Answer:\s*(.+)", resp_from_groq, re.DOTALL)
+                if final_answer_match:
+                    tts_handling(final_answer_match.group(1))
+                    print(f"<--------[Final Answer]------>: {final_answer_match.group(1)}")
+                else:
+                    print("[ERROR] Could not extract final answer.")
             elif y_n.group(1) == "NO":
                 F = False
