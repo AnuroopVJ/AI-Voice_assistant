@@ -2,11 +2,31 @@ import speech_recognition as sr
 from dotenv import load_dotenv
 from groq import Groq
 import os
+from typing import List, Union
+
 # Initialize recognizer class (for recognizing the speech)
 load_dotenv()
 r = sr.Recognizer()
 client = Groq(api_key = os.getenv("GROQ_API_KEY"))
 text = "" 
+
+from groq.types.chat import ChatCompletionSystemMessageParam, ChatCompletionUserMessageParam, ChatCompletionAssistantMessageParam
+
+# Initialize conversation history
+
+
+conversation_history: List[
+    Union[
+        ChatCompletionSystemMessageParam,
+        ChatCompletionUserMessageParam,
+        ChatCompletionAssistantMessageParam
+    ]
+] = [
+    ChatCompletionSystemMessageParam(
+        role="system",
+        content="You are a guy named Athul."
+    )
+]
 
 
 def speech_rec() -> str:
@@ -22,31 +42,35 @@ def speech_rec() -> str:
         except:
             text = "[ERROR]"
     return text
-
-
 def groq_chat(text):
-    chat_completion = client.chat.completions.create(
-        messages=[
-            # Set an optional system message. This sets the behavior of the
-            # assistant and can be used to provide specific instructions for
-            # how it should behave throughout the conversation.
-            {
-                "role": "system",
-                "content": "You are a guy named Athul."
-            },
-            # Set a user message for the assistant to respond to.
-            {
-                "role": "user",
-                "content": text,
-            }
-        ],
+    # Add the user's message to the conversation history
+    conversation_history.append(
+        ChatCompletionUserMessageParam(
+            role="user",
+            content=text,
+        )
+    )
 
-        # The language model which will generate the completion.
+    chat_completion = client.chat.completions.create(
+        messages=conversation_history,
         model="llama-3.3-70b-versatile"
     )
 
-    # Print the completion returned by the LLM.
-    print(chat_completion.choices[0].message.content)
+    # Get the assistant's response
+    assistant_response = chat_completion.choices[0].message.content
+
+    # Add the assistant's response to the conversation history
+    conversation_history.append(
+        ChatCompletionAssistantMessageParam(
+            role="assistant",
+            content=assistant_response,
+        )
+    )
+
+    # Print the assistant's response
+    print(assistant_response)
+    # Print the assistant's response
+    print(assistant_response)
 
 while True:
     text = speech_rec()
@@ -58,4 +82,4 @@ while True:
     else:
         groq_chat(text)
         
-    print("-------------------------------------------------")    
+    print("#-------------------------------------------------#")
