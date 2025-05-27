@@ -84,12 +84,9 @@ output = []
 st.sidebar.title("⚙️ Settings")
 st.sidebar.markdown("Adjust the settings for Kyle:")
 language = st.sidebar.selectbox("🌐 Select Language", ["English (en)", "Spanish (es)", "French (fr)"], index=0)
-speed = st.sidebar.slider("🎵 Talking Speed", min_value=1.0, max_value=5.0, value=3.0, step=1.0)
-st.text_area("💬 Chat History", value=output, height=200)
+
 # for recognizing the speech
-
 r = sr.Recognizer()
-
 text = "" 
 F = True
 
@@ -109,6 +106,15 @@ def speech_rec() -> str:
             text = "[ERROR] An error occured"
     return text
 
+# Update the history dynamically whenever a new response is added
+if "history" not in st.session_state:
+    st.session_state["history"] = ""
+
+# Function to update the history
+def update_history():
+    assistant_history = [entry["content"] for entry in chat_history if entry["role"] == "assistant"]
+    st.session_state["history"] = "\n".join(assistant_history) if assistant_history else ""
+
 def groq_chat_handling(user_input: str):
     # Append the user input to the chat history
     chat_history.append({"role": "user", "content": user_input})
@@ -121,6 +127,8 @@ def groq_chat_handling(user_input: str):
       "role": "assistant",
       "content": response.choices[0].message.content # type: ignore
   })
+    # Update the history in session state
+    update_history()
     response = response.choices[0].message.content
     return response
 
@@ -226,30 +234,14 @@ or Anything unnecessary or off-format
 # chat history initialisation
 chat_history = [system_prompt]
 
-# Display logs and responses
-st.subheader("📜 Logs")
-log_placeholder = st.empty()  # Placeholder for logs
 
-# Display AI Response in a Cool-Looking Box
-st.markdown(
-    """
-    <style>
-    .response-box {
-        background-color: #2c2c3e;
-        color: #e0e0e0;
-        border: 1px solid #4caf50;
-        border-radius: 10px;
-        padding: 20px;
-        font-size: 18px;
-        line-height: 1.6;
-        margin-top: 20px;
-        box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.2);
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
+if "history" not in st.session_state:
+    assistant_history = [entry["content"] for entry in chat_history if entry["role"] == "assistant"]
+    st.session_state["history"] = "\n".join(assistant_history) if assistant_history else ""
+
+history_area = st.text_area(
+    "History", value=st.session_state["history"], height=200
 )
-
 
 def procces():
     global F
