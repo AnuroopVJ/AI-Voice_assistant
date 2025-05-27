@@ -1,21 +1,98 @@
+from io import BytesIO
 import speech_recognition as sr
 from dotenv import load_dotenv
 from groq import Groq
 import os
+import pygame
+from gtts import gTTS
 import re
 from duckduckgo_search import DDGS
 import sounddevice as sd
-import torch
-from TTS.api import TTS
+import streamlit as st
 
-# Initialize TTS 
-tts = TTS(model_name = "tts_models/de/thorsten/tacotron2-DDC", progress_bar = False, gpu = False)
-# for recognizing the speech
 load_dotenv()
+# client = Groq(api_key = os.getenv("GROQ_API_KEY"))
+client = Groq(api_key = "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")
+# Improved Streamlit UI
+
+# Set the page configuration
+st.set_page_config(
+    page_title="Kyle - Voice Assistant",
+    page_icon="🎙️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Apply custom CSS for better styling
+st.markdown(
+    """
+    <style>
+    /* Custom CSS for a clean and modern UI */
+    body {
+        background-color: #1e1e2f;
+        color: #e0e0e0;
+        font-family: 'Arial', sans-serif;
+    }
+    .stButton>button {
+        background-color: #4caf50;
+        color: #ffffff;
+        border: none;
+        border-radius: 8px;
+        padding: 10px 20px;
+        font-size: 16px;
+        cursor: pointer;
+    }
+    .stButton>button:hover {
+        background-color: #45a049;
+    }
+    .stSidebar {
+        background-color: #2c2c3e;
+        color: #ffffff;
+    }
+    .stTextInput>div>input {
+        background-color: #2c2c3e;
+        color: #ffffff;
+        border: 1px solid #444444;
+        border-radius: 5px;
+        padding: 10px;
+    }
+    .stMarkdown {
+        font-size: 18px;
+        line-height: 1.6;
+    }
+    .stTitle {
+        color: #4caf50;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# Main UI
+st.title("🎙️ Kyle")
+st.markdown(
+    """
+    Welcome to **Kyle**, your smart and goal-driven voice assistant!  
+    Use the button below to start interacting with Kyle.  
+    Kyle can listen to your voice, process your requests, and provide intelligent responses.
+    """
+)
+
+output = []
+
+# Sidebar for additional options
+st.sidebar.title("⚙️ Settings")
+st.sidebar.markdown("Adjust the settings for Kyle:")
+language = st.sidebar.selectbox("🌐 Select Language", ["English (en)", "Spanish (es)", "French (fr)"], index=0)
+speed = st.sidebar.slider("🎵 Talking Speed", min_value=1.0, max_value=5.0, value=3.0, step=1.0)
+st.text_area("💬 Chat History", value=output, height=200)
+# for recognizing the speech
+
 r = sr.Recognizer()
-client = Groq(api_key = os.getenv("GROQ_API_KEY"))
+
 text = "" 
-F = None
+F = True
+
 
 
 def speech_rec() -> str:
@@ -47,105 +124,248 @@ def groq_chat_handling(user_input: str):
     response = response.choices[0].message.content
     return response
 
-def tts_handling(txt):
-    wav, sample_rate = tts.tts(text = txt,speaker = None,language = None,return_type = "np")
-    #play it directly
-    sd.play(wav, sample_rate)
-    sd.wait()
+def tts_handling(text, language='en', speed=3.0):
+    ''' Speaks without saving the audio file '''
+    try:
+        # Initialize pygame mixer
+        if not pygame.mixer.get_init():
+            pygame.mixer.init()
 
+        # Convert text to speech
+        mp3_fo = BytesIO()
+        tts = gTTS(text, lang=language, slow=False)
+        tts.write_to_fp(mp3_fo)
+        mp3_fo.seek(0)
+
+        # Load and play the audio
+        pygame.mixer.music.load(mp3_fo, "mp3")
+        pygame.mixer.init(frequency=int(44100 * speed)) 
+        pygame.mixer.music.play()
+
+        # Adjust playback speed
+        pygame.mixer.music.set_endevent(pygame.USEREVENT)
+        pygame.mixer.music.set_volume(1.0)  # Optional: Adjust volume
+ # Increase speed
+
+        # Wait until the audio finishes playing
+        while pygame.mixer.music.get_busy():
+            pygame.time.Clock().tick(10)  # Adjust speed multiplier
+    except Exception as e:
+        print(f"[ERROR] TTS handling failed: {e}")
+#-------------------------------------#
+# TOOLS
 def search_tool(query: str):
-    search =  DDGS()
-    results = search.text(query, max_results=5)
-    return results
+    try:
+        search = DDGS()
+        results = search.text(query, max_results=5)
+        return results
+    except Exception as e:
+        error_message = str(e).lower()
+        if "rate limit" in error_message or "RateLimit" in error_message:
+            print(f"[ERROR] Search tool failed due to rate limit: {e}")
+            st.write("[ERROR] Search tool failed due to rate limit. Please try again later.")
+            return "[ERROR] Rate limit exceeded. Please wait and try again."
+        else:
+            print(f"[ERROR] Search tool failed: {e}")
+            st.write("[ERROR] An unexpected error occurred while using the search tool.")
+            return "[ERROR] An unexpected error occurred."
+
 
 # Set the system prompt
 system_prompt = {
     "role": "system",
     "content":
     """
-You are a smart and goal-driven ReAct agent. Follow the Thought → Action → Observation loop to solve tasks efficiently.\n
+You are Kyle, a smart and goal-driven AI agent that uses the ReAct (Reasoning + Acting) framework to solve tasks efficiently.
 
-Think carefully before each step.
+You follow the loop:Thought → Action → Observation until the goal is achieved.
 
-Use tools only when needed.
-TOOLS AVAILABLE: search_tool 
-Be concise but complete.
+Guidelines:
 
-Stop when the final answer is reached.
-DO NOT SAY UNNEEDED STUFF LIKE:
-'Observation:Awaiting input...' or 'WAITING FOR OBSERVATION...'
-Format:
-Thought: [your reasoning here]
+-Think before you act.Always explain your reasoning in the Thought step.
+-Use tools only when necessary.If a tool is not needed, skip the Action and go straight to the Final Answer.
+-Be concise but complete.Avoid fluff.Every step should drive toward the solution.
+-Always return a Final Answer.
+-if it's casual convos — always wrap up with a clear and friendly Final Answer.
+-Stay efficient, but let your personality shine. You’re smart, sharp, and a little witty.
+TOOLS AVAILABLE:
+search_tool
+
+FORMAT TO FOLLOW (extreamly Strictly):
+
+When thinking and acting:
+
+Thought: [your reasoning here] 
 Action: [tool_name: input]
-FAR@!: [if final anser is returned or not->NO or YES]
+FAR@!: [YES or NO depending on whether final answer is reached(pls dont put other vals like 'NA' here)]
 EXCECUTE
 
-you'll be then given the result like this:
-Observation: [result from tool]
+When receiving result:
 
-if so:
-Final Answer: [your answer]
+Observation: [tool output]
 
-FOLLOW THESE VERY STRICTLY"""
+If you reach the final answer WITHOUT needing/using tools:
+
+FAR@!: YES 
+Final Answer: [your final answer (THIS IS COMPULSORY)]
+
+If you used a tool and now have the final answer if FAR@! is YES:
+
+Final Answer: [your final answer]
+
+NEVER SAY:
+
+"(Waiting for observation...)"
+
+"Observation: Awaiting input..."
+
+or Anything unnecessary or off-format
+"""
 }
 
 # chat history initialisation
 chat_history = [system_prompt]
 
-while True:
-    if F == True or F == None:  # Only listen to the user if F is True
-        # Get user input (speech to text conversion)
-        speech_to_text = speech_rec()
-        if speech_to_text == "[ERROR] An error occured":
-            print("[ERROR] - An error occured. Please try again.")
-            continue
-        elif speech_to_text == "exit" or speech_to_text == "quit" or speech_to_text == "bye":
-            break
-        else:
-            print(f"------------||User||------------ \n {speech_to_text}")
-            print("------------||AI||------------")
+# Display logs and responses
+st.subheader("📜 Logs")
+log_placeholder = st.empty()  # Placeholder for logs
+
+# Display AI Response in a Cool-Looking Box
+st.markdown(
+    """
+    <style>
+    .response-box {
+        background-color: #2c2c3e;
+        color: #e0e0e0;
+        border: 1px solid #4caf50;
+        border-radius: 10px;
+        padding: 20px;
+        font-size: 18px;
+        line-height: 1.6;
+        margin-top: 20px;
+        box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.2);
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+
+def procces():
+    global F
+    while True:
+        print("Debug: Entering the loop")
+        print(f"Debug: F = {F}")
+
+        if F is None or F is True:  # Only listen to the user if F is True
+            # Get user input (speech to text conversion)
+            speech_to_text = speech_rec()
+            if speech_to_text == "[ERROR] An error occured":
+                print("[ERROR] - An error occurred. Please try again.")
+                continue
+            elif speech_to_text in ["exit", "quit", "bye"]:
+                print("Exiting...")
+                break
+            else:
+                print(f"------------||User||------------ \n {speech_to_text}")
+                print("------------||AI||------------")
+                resp_from_groq = groq_chat_handling(speech_to_text)
+                print(resp_from_groq)
+
+        if "Action:" in str(resp_from_groq):  # Check for actions in the response
+            print("-----------TASK EXECUTION-------------")
+
+            # Extract the tool name and input from the response
+            tool_name = re.search(r"Action:\s*(\w+_tool)", resp_from_groq)  # type: ignore
+            if tool_name is not None:  # Check if the tool name is found
+                extracted_tool_name = tool_name.group(1)  # Extract the captured group (tool name)
+                print(f"TOOL_NAME: {extracted_tool_name}")
+
+                if extracted_tool_name == "search_tool":  # Check if the tool name is "search_tool"
+                    # Extract words after "search_tool:"
+                    tool_input = re.search(r"search_tool:\s*(.+)", resp_from_groq)  # type: ignore
+                    if tool_input:
+                        print(f"TOOL_ARG: {tool_input.group(1)}")  # Print the matched input
+                        tool_input = tool_input.group(1)
+                        result_s = search_tool(tool_input)
+                        result_s = str(result_s)
+                        print(result_s)
+
+                        # Update the AI response after executing the tool
+                        resp_from_groq = groq_chat_handling(result_s)
+                        print(resp_from_groq)
+                    else:
+                        print("[ERROR] Could not extract tool input.")
+                else:
+                    print("[ERROR] Tool name is not recognized.")
+            else:
+                print("[ERROR] Could not extract tool name.")
+
+        if "FAR@!:" in str(resp_from_groq):  # Handle the FAR@! flag
+            y_n = re.search(r"FAR@!:\s*(YES|NO)", resp_from_groq)  # type: ignore
+            final_answer_match = re.search(r"Final Answer:\s*(.+)", resp_from_groq, re.DOTALL)  # type: ignore
+            if y_n:
+                if y_n.group(1) == "YES" or final_answer_match:
+                    F = True
+                    if final_answer_match:
+                        tts_handling(final_answer_match.group(1))
+                        print(f"<--------[Final Answer]------>: {final_answer_match.group(1)}")
+                    else:
+                        print("[ERROR] Could not extract final answer.")
+                elif y_n.group(1) == "NO":
+                    F = False
+                    print("Debug: FAR@! is NO, waiting for further actions.")
+        if F is False:
+
             resp_from_groq = groq_chat_handling(speech_to_text)
             print(resp_from_groq)
-    else:
-        print("Continuing AI-driven execution...")
+        
+        if "Action:" in str(resp_from_groq):  # Check for actions in the response
+            print("-----------TASK EXECUTION-------------")
 
-    if "Action:" in str(resp_from_groq):
-        print("-----------TASK EXCECUTION-------------")
+            # Extract the tool name and input from the response
+            tool_name = re.search(r"Action:\s*(\w+_tool)", resp_from_groq)  # type: ignore
+            if tool_name is not None:  # Check if the tool name is found
+                extracted_tool_name = tool_name.group(1)  # Extract the captured group (tool name)
+                print(f"TOOL_NAME: {extracted_tool_name}")
 
-        # Extract the tool name and input from the response
-        tool_name = re.search(r"Action:\s*(\w+_tool)", resp_from_groq)
-        if tool_name is not None:  # Check if the tool name is found
-            extracted_tool_name = tool_name.group(1)  # Extract the captured group (tool name)
-            print(f"TOOL_NAME: {extracted_tool_name}")
+                if extracted_tool_name == "search_tool":  # Check if the tool name is "search_tool"
+                    # Extract words after "search_tool:"
+                    tool_input = re.search(r"search_tool:\s*(.+)", resp_from_groq)  # type: ignore
+                    if tool_input:
+                        print(f"TOOL_ARG: {tool_input.group(1)}")  # Print the matched input
+                        tool_input = tool_input.group(1)
+                        result_s = search_tool(tool_input)
+                        result_s = str(result_s)
+                        print(result_s)
 
-            if extracted_tool_name == "search_tool":  # Check if the tool name is "search_tool"
-                # Extract words after "search_tool:"
-                tool_input = re.search(r"search_tool:\s*(.+)", resp_from_groq)
-                if tool_input:
-                    print(f"TOOL_ARG: {tool_input.group(1)}")  # Print the matched input
-                    tool_input = tool_input.group(1)
-                    result_s = search_tool(tool_input)
-                    result_s = str(result_s)
-                    print(result_s)
-                    resp_from_groq = groq_chat_handling(result_s)
-                    print(resp_from_groq)
+                        # Update the AI response after executing the tool
+                        resp_from_groq = groq_chat_handling(result_s)
+                        print(resp_from_groq)
+                    else:
+                        print("[ERROR] Could not extract tool input.")
                 else:
-                    print("[ERROR] Could not extract tool input.")
+                    print("[ERROR] Tool name is not recognized.")
             else:
-                print("[ERROR] Tool name is not recognized.")
-        else:
-            print("[ERROR] Could not extract tool name.")
+                print("[ERROR] Could not extract tool name.")
 
-    if "FAR@!:" in str(resp_from_groq):
-        y_n = re.search(r"FAR@!:\s*(YES|NO)", resp_from_groq)
-        if y_n:
-            if y_n.group(1) == "YES":
-                F = True
-                final_answer_match = re.search(r"Final Answer:\s*(.+)", resp_from_groq, re.DOTALL)
-                if final_answer_match:
-                    tts_handling(final_answer_match.group(1))
-                    print(f"<--------[Final Answer]------>: {final_answer_match.group(1)}")
-                else:
-                    print("[ERROR] Could not extract final answer.")
-            elif y_n.group(1) == "NO":
-                F = False
+        if "FAR@!:" in str(resp_from_groq):  # Handle the FAR@! flag
+            y_n = re.search(r"FAR@!:\s*(YES|NO)", resp_from_groq)  # type: ignore
+            final_answer_match = re.search(r"Final Answer:\s*(.+)", resp_from_groq, re.DOTALL)  # type: ignore
+            if y_n:
+                if y_n.group(1) == "YES" or final_answer_match:
+                    F = True
+                    if final_answer_match:
+                        
+                        print(f"[Final Answer]: {final_answer_match.group(1)}")
+                        
+                    else:
+                        print("[ERROR] Could not extract final answer.")
+                elif y_n.group(1) == "NO":
+                    F = False
+
+
+# Button to start the voice assistant
+if st.button("🎤 Start Listening"):
+    st.write("Kyle is now listening...")
+    procces()  # Call the existing logic
