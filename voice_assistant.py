@@ -7,7 +7,7 @@ import pygame
 from gtts import gTTS
 import re
 from duckduckgo_search import DDGS
-import sounddevice as sd
+
 import streamlit as st
 
 load_dotenv()
