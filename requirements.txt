@@ -4,3 +4,4 @@ gtts
 python-dotenv
 duckduckgo-search
 groq
+pyaudio
