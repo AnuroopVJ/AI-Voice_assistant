@@ -72,19 +72,15 @@ st.markdown(
 st.title("🎙️ Kyle")
 st.markdown(
     """
-    Welcome to **Kyle**, your smart and goal-driven voice assistant!  
-    Use the button below to start interacting with Kyle.  
+    Welcome to **Kyle**, your smart and goal-driven voice assistant!\n
+    Use the button below to start interacting with Kyle.\n
     Kyle can listen to your voice, process your requests, and provide intelligent responses.
     """
 )
 
 output = []
 
-# Sidebar for additional options
-st.sidebar.title("⚙️ Settings")
-st.sidebar.markdown("Adjust the settings for Kyle:")
-language = st.sidebar.selectbox("🌐 Select Language", ["English (en)", "Spanish (es)", "French (fr)"], index=0)
-
+language = "en"
 # for recognizing the speech
 r = sr.Recognizer()
 text = "" 
@@ -94,7 +90,7 @@ F = True
 
 def speech_rec() -> str:
     with sr.Microphone() as source:
-        print("Listeing...")
+        print("Listening...")
         audio_text = r.listen(source)
         print("Proccessing...")
 
@@ -106,14 +102,6 @@ def speech_rec() -> str:
             text = "[ERROR] An error occured"
     return text
 
-# Update the history dynamically whenever a new response is added
-if "history" not in st.session_state:
-    st.session_state["history"] = ""
-
-# Function to update the history
-def update_history():
-    assistant_history = [entry["content"] for entry in chat_history if entry["role"] == "assistant"]
-    st.session_state["history"] = "\n".join(assistant_history) if assistant_history else ""
 
 def groq_chat_handling(user_input: str):
     # Append the user input to the chat history
@@ -127,8 +115,7 @@ def groq_chat_handling(user_input: str):
       "role": "assistant",
       "content": response.choices[0].message.content # type: ignore
   })
-    # Update the history in session state
-    update_history()
+
     response = response.choices[0].message.content
     return response
 
@@ -171,11 +158,11 @@ def search_tool(query: str):
         error_message = str(e).lower()
         if "rate limit" in error_message or "RateLimit" in error_message:
             print(f"[ERROR] Search tool failed due to rate limit: {e}")
-            st.write("[ERROR] Search tool failed due to rate limit. Please try again later.")
+            st.info("[ERROR] Search tool failed due to rate limit. Please try again later.")
             return "[ERROR] Rate limit exceeded. Please wait and try again."
         else:
             print(f"[ERROR] Search tool failed: {e}")
-            st.write("[ERROR] An unexpected error occurred while using the search tool.")
+            st.error("[ERROR] An unexpected error occurred while using the search tool.")
             return "[ERROR] An unexpected error occurred."
 
 
@@ -191,7 +178,7 @@ You follow the loop:Thought → Action → Observation until the goal is achieve
 Guidelines:
 
 -Think before you act.Always explain your reasoning in the Thought step.
--Use tools only when necessary.If a tool is not needed, skip the Action and go straight to the Final Answer.
+-Use tools only when necessary.If a
 -Be concise but complete.Avoid fluff.Every step should drive toward the solution.
 -Always return a Final Answer.
 -if it's casual convos — always wrap up with a clear and friendly Final Answer.
@@ -233,18 +220,12 @@ or Anything unnecessary or off-format
 
 # chat history initialisation
 chat_history = [system_prompt]
+box = st.container(border=True)
 
-
-if "history" not in st.session_state:
-    assistant_history = [entry["content"] for entry in chat_history if entry["role"] == "assistant"]
-    st.session_state["history"] = "\n".join(assistant_history) if assistant_history else ""
-
-history_area = st.text_area(
-    "History", value=st.session_state["history"], height=200
-)
 
 def procces():
     global F
+
     while True:
         print("Debug: Entering the loop")
         print(f"Debug: F = {F}")
@@ -263,6 +244,7 @@ def procces():
                 print("------------||AI||------------")
                 resp_from_groq = groq_chat_handling(speech_to_text)
                 print(resp_from_groq)
+
 
         if "Action:" in str(resp_from_groq):  # Check for actions in the response
             print("-----------TASK EXECUTION-------------")
@@ -302,6 +284,9 @@ def procces():
                     if final_answer_match:
                         tts_handling(final_answer_match.group(1))
                         print(f"<--------[Final Answer]------>: {final_answer_match.group(1)}")
+                        with box:
+                            st.write("You: " + speech_to_text)
+                            st.write("Kyle: " + final_answer_match.group(1))
                     else:
                         print("[ERROR] Could not extract final answer.")
                 elif y_n.group(1) == "NO":
@@ -312,52 +297,9 @@ def procces():
             resp_from_groq = groq_chat_handling(speech_to_text)
             print(resp_from_groq)
         
-        if "Action:" in str(resp_from_groq):  # Check for actions in the response
-            print("-----------TASK EXECUTION-------------")
-
-            # Extract the tool name and input from the response
-            tool_name = re.search(r"Action:\s*(\w+_tool)", resp_from_groq)  # type: ignore
-            if tool_name is not None:  # Check if the tool name is found
-                extracted_tool_name = tool_name.group(1)  # Extract the captured group (tool name)
-                print(f"TOOL_NAME: {extracted_tool_name}")
-
-                if extracted_tool_name == "search_tool":  # Check if the tool name is "search_tool"
-                    # Extract words after "search_tool:"
-                    tool_input = re.search(r"search_tool:\s*(.+)", resp_from_groq)  # type: ignore
-                    if tool_input:
-                        print(f"TOOL_ARG: {tool_input.group(1)}")  # Print the matched input
-                        tool_input = tool_input.group(1)
-                        result_s = search_tool(tool_input)
-                        result_s = str(result_s)
-                        print(result_s)
-
-                        # Update the AI response after executing the tool
-                        resp_from_groq = groq_chat_handling(result_s)
-                        print(resp_from_groq)
-                    else:
-                        print("[ERROR] Could not extract tool input.")
-                else:
-                    print("[ERROR] Tool name is not recognized.")
-            else:
-                print("[ERROR] Could not extract tool name.")
-
-        if "FAR@!:" in str(resp_from_groq):  # Handle the FAR@! flag
-            y_n = re.search(r"FAR@!:\s*(YES|NO)", resp_from_groq)  # type: ignore
-            final_answer_match = re.search(r"Final Answer:\s*(.+)", resp_from_groq, re.DOTALL)  # type: ignore
-            if y_n:
-                if y_n.group(1) == "YES" or final_answer_match:
-                    F = True
-                    if final_answer_match:
-                        
-                        print(f"[Final Answer]: {final_answer_match.group(1)}")
-                        
-                    else:
-                        print("[ERROR] Could not extract final answer.")
-                elif y_n.group(1) == "NO":
-                    F = False
 
 
 # Button to start the voice assistant
 if st.button("🎤 Start Listening"):
     st.write("Kyle is now listening...")
-    procces()  # Call the existing logic
+    procces()  # Call the proccessing logic
