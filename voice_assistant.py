@@ -11,8 +11,8 @@ import sounddevice as sd
 import streamlit as st
 
 load_dotenv()
-# client = Groq(api_key = os.getenv("GROQ_API_KEY"))
-client = Groq(api_key = "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")
+client = Groq(api_key = os.getenv("GROQ_API_KEY"))
+
 # Improved Streamlit UI
 
 # Set the page configuration
