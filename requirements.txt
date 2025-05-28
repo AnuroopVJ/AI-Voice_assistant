@@ -3,3 +3,4 @@ pygame
 gtts
 python-dotenv
 duckduckgo-search
+groq
