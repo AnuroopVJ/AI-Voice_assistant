@@ -1,0 +1,5 @@
+speechrecognition
+pygame
+gtts
+python-dotenv
+duckduckgo-search
