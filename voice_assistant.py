@@ -72,9 +72,9 @@ st.markdown(
 st.title("🎙️ Kyle")
 st.markdown(
     """
-    Welcome to **Kyle**, your smart and goal-driven voice assistant!\n
+    Welcome to **Kyle**, your smart voice assistant!\n
     Use the button below to start interacting with Kyle.\n
-    Kyle can listen to your voice, process your requests, and provide intelligent responses.
+
     """
 )
 
